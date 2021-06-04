@@ -1,25 +1,23 @@
-# 1. 案例介绍
+# 1.案例介绍
 
-## 1.1 业务分析
+## 1.1业务分析
 
-模拟电商网站购物场景中的【下单】和【支付】业务
+模拟电商网站网购场景中的【下单】和【支付】业务
 
-### 1）下单
+### 1.1.1下单
 
-![](img/下单组件图.png)
+![image-20210525213417681](asserts/image-20210525213417681.png)
 
 1. 用户请求订单系统下单
 2. 订单系统通过RPC调用订单服务下单
-3. 订单服务调用优惠券服务，扣减优惠券
-4. 订单服务调用调用库存服务，校验并扣减库存
+3. 订单服务调用优惠劵服务，扣减优惠劵
+4. 订单服务调用库存服务，校验并扣减库存
 5. 订单服务调用用户服务，扣减用户余额
 6. 订单服务完成确认订单
 
-------
+### 1.1.2支付
 
-### 2）支付
-
-![](img/支付组件图.png)
+![image-20210525213920549](asserts/image-20210525213920549.png)
 
 1. 用户请求支付系统
 2. 支付系统调用第三方支付平台API进行发起支付流程
@@ -28,210 +26,191 @@
 5. 支付系统调用积分服务添加积分
 6. 支付系统调用日志服务记录日志
 
-## 1.2 问题分析
+## 1.2问题分析
 
-### 问题1
+### 1.2.1问题1
 
-用户提交订单后，扣减库存成功、扣减优惠券成功、使用余额成功，但是在确认订单操作失败，需要对库存、库存、余额进行回退。
+用户提交订单后，扣减库存成功、扣减优惠劵成功、使用余额成功，但是在确认订单操作失败，需要对库存、优惠劵、余额进行回退。
 
 如何保证数据的完整性？
 
-![](img/下单失败流程图.png)
+![image-20210525214821029](asserts/image-20210525214821029.png)
 
-<u>使用MQ保证在下单失败后系统数据的完整性</u>
+使用MQ保证在下单失败后系统数据的完整性
 
-![](img/下单时序图(2).png)
+![image-20210525222012258](asserts/image-20210525222012258.png)
 
-### 问题2
+### 1.2.2问题2
 
-用户通过第三方支付平台（支付宝、微信）支付成功后，第三方支付平台要通过回调API异步通知商家支付系统用户支付结果，支付系统根据支付结果修改订单状态、记录支付日志和给用户增加积分。
+用户通过第三方支付平台（支付宝、微信）支付成功后，第三方支付平台要通过回调API，异步通知商家支付系统用户支付结果，支付系统根据支付结果修改订单状态、记录支付日志和给用户增加积分。
 
-商家支付系统如何保证在收到第三方支付平台的异步通知时，如何快速给第三方支付凭条做出回应？
+商家支付系统如何保证在收到第三方支付平台的异步同志时，如何快速给第三方支付凭条作出回应？
 
-![](img/支付流程.png)
+![image-20210525223424434](asserts/image-20210525223424434.png)
 
-<u>通过MQ进行数据分发，提高系统处理性能</u>
+通过MQ进行数据分发，提高系统处理性能
 
-![](img/支付成功数据分发流程图.png)
+![image-20210525224334294](asserts/image-20210525224334294.png)
 
-# 2. 技术分析
+## 2.技术分析
 
-## 2.1 技术选型
+## 2.1技术选型
 
-- SpringBoot
+- Spring Boot
 - Dubbo
 - Zookeeper
 - RocketMQ
-- Mysql
+- MySQL
 
-![](img/项目结构图.png)
+![image-20210525225938438](asserts/image-20210525225938438.png)
 
-## 2.2 SpringBoot整合RocketMQ
+## 2.2SpringBoot整合RocketMQ
 
-下载[rocketmq-spring](https://github.com/apache/rocketmq-spring.git)项目
+### 2.2.1消息生产者
 
-将rocketmq-spring安装到本地仓库
-
-```shell
-mvn install -Dmaven.skip.test=true
-```
-
-### 2.2.1 消息生产者
-
-#### 1）添加依赖
+**1）添加依赖**
 
 ```xml
-<parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>2.0.1.RELEASE</version>
-</parent>
-
-<properties>
-    <rocketmq-spring-boot-starter-version>2.0.3</rocketmq-spring-boot-starter-version>
-</properties>
-
 <dependencies>
     <dependency>
         <groupId>org.apache.rocketmq</groupId>
         <artifactId>rocketmq-spring-boot-starter</artifactId>
-        <version>${rocketmq-spring-boot-starter-version}</version>
     </dependency>
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
-        <version>1.18.6</version>
     </dependency>
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
     </dependency>
-
 </dependencies>
 ```
 
-#### 2）配置文件
+**2）配置文件**
 
 ```properties
-# application.properties
-rocketmq.name-server=192.168.25.135:9876;192.168.25.138:9876
+rocketmq.name-server=192.168.1.100:9876;192.168.1.120:9876
 rocketmq.producer.group=my-group
 ```
 
-#### 3）启动类
+**3）启动类**
 
 ```java
 @SpringBootApplication
 public class MQProducerApplication {
+
     public static void main(String[] args) {
-        SpringApplication.run(MQSpringBootApplication.class);
+        SpringApplication.run(MQProducerApplication.class, args);
     }
+
 }
 ```
 
-#### 4）测试类
+**4）测试类**
 
 ```java
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = {MQSpringBootApplication.class})
-public class ProducerTest {
-
+@SpringBootTest
+public class MQProducerTests {
+    
     @Autowired
     private RocketMQTemplate rocketMQTemplate;
 
     @Test
-    public void test1(){
-        rocketMQTemplate.convertAndSend("springboot-mq","hello springboot rocketmq");
+    public void test1() {
+        rocketMQTemplate.convertAndSend("springboot-mq", "hello spring boot rocket mq");
     }
+
 }
 ```
 
-### 2.2.2 消息消费者
 
-#### 1）添加依赖
 
-同消息生产者
+### 2.2.2消息消费者
 
-#### 2）配置文件
+**1）添加依赖**
 
-同消息生产者
+同生产者。
 
-#### 3）启动类
+**2）配置文件**
+
+同生产者。
+
+**3）启动类**
 
 ```java
 @SpringBootApplication
 public class MQConsumerApplication {
+
     public static void main(String[] args) {
-        SpringApplication.run(MQSpringBootApplication.class);
+        SpringApplication.run(MQConsumerApplication.class, args);
     }
+
 }
 ```
 
-#### 4）消息监听器
+
+
+**4）消息监听器**
 
 ```java
 @Slf4j
 @Component
-@RocketMQMessageListener(topic = "springboot-mq",consumerGroup = "springboot-mq-consumer-1")
-public class Consumer implements RocketMQListener<String> {
+@RocketMQMessageListener(topic = "springboot-mq", consumerGroup = "springboot-mq-consumer-1")
+public class SendMsgListener implements RocketMQListener<String> {
 
     @Override
-    public void onMessage(String message) {
-        log.info("Receive message："+message);
+    public void onMessage(String msg) {
+        log.info("Receive msg: {}", msg);
     }
 }
 ```
 
-## 2.3 SpringBoot整合Dubbo
 
-下载[dubbo-spring-boot-starter](https://github.com/alibaba/dubbo-spring-boot-starter.git)依赖包
 
-将```dubbo-spring-boot-starter```安装到本地仓库
+## 2.3SpringBoot整合Dubbo
 
-```shell
-mvn install -Dmaven.skip.test=true
-```
-
-![](./img/dubbo.png)
-
-### 2.3.1 搭建Zookeeper集群
+### 2.3.1搭建Zookeeper集群
 
 #### 1）准备工作
 
 1. 安装JDK
-2. 将Zookeeper上传到服务器
-3. 解压Zookeeper，并创建data目录，将conf下的zoo_sample.cfg文件改名为zoo.cfg
-4. 建立```/user/local/zookeeper-cluster```,将解压后的Zookeeper复制到以下三个目录
 
-```sh
-/usr/local/zookeeper-cluster/zookeeper-1
-/usr/local/zookeeper-cluster/zookeeper-2
-/usr/local/zookeeper-cluster/zookeeper-3
-```
+2. 将Zookeeper上传到服务器
+
+3. 解压Zookeeper，并创建data目录，将conf下的zoo_sample.cfg文件改名为zoo.cfg
+
+4. 建立`/user/local/zookeeper-cluster`,将解压后的Zookeeper复制到以下三个目录
+
+   ```
+   /usr/local/zookeeper-cluster/zookeeper-1
+   /usr/local/zookeeper-cluster/zookeeper-2
+   /usr/local/zookeeper-cluster/zookeeper-3
+   ```
 
 5. 配置每一个 Zookeeper 的 dataDir（zoo.cfg） clientPort 分别为 2181 2182 2183
 
-   修改```/usr/local/zookeeper-cluster/zookeeper-1/conf/zoo.cfg```
+   修改/usr/local/zookeeper-cluster/zookeeper-1/conf/zoo.cfg
 
-```shell
-clientPort=2181
-dataDir=/usr/local/zookeeper-cluster/zookeeper-1/data
-```
+   ```
+   clientPort=2181
+   dataDir=/usr/local/zookeeper-cluster/zookeeper-1/data
+   ```
 
-​	修改/usr/local/zookeeper-cluster/zookeeper-2/conf/zoo.cfg
+   修改/usr/local/zookeeper-cluster/zookeeper-2/conf/zoo.cfg
 
-```shell
-clientPort=2182
-dataDir=/usr/local/zookeeper-cluster/zookeeper-2/data
-```
+   ```
+   clientPort=2182
+   dataDir=/usr/local/zookeeper-cluster/zookeeper-2/data
+   ```
 
-​	修改/usr/local/zookeeper-cluster/zookeeper-3/conf/zoo.cfg
+   修改/usr/local/zookeeper-cluster/zookeeper-3/conf/zoo.cfg
 
-```shell
-clientPort=2183
-dataDir=/usr/local/zookeeper-cluster/zookeeper-3/data
-```
+   ```
+   clientPort=2183
+   dataDir=/usr/local/zookeeper-cluster/zookeeper-3/data
+   ```
 
 #### 2）配置集群
 
@@ -239,180 +218,146 @@ dataDir=/usr/local/zookeeper-cluster/zookeeper-3/data
 
 2. 在每一个 zookeeper 的 zoo.cfg 配置客户端访问端口（clientPort）和集群服务器 IP 列表。
 
-   集群服务器 IP 列表如下
+   集群服务器 IP 列表如下：
 
-```shell
-server.1=192.168.25.140:2881:3881
-server.2=192.168.25.140:2882:3882
-server.3=192.168.25.140:2883:3883
-```
+   ```
+   server.1=192.168.25.140:2881:3881
+   server.2=192.168.25.140:2882:3882
+   server.3=192.168.25.140:2883:3883
+   ```
 
-解释：server.服务器 ID=服务器 IP 地址：服务器之间通信端口：服务器之间投票选举端口
+   解释：server.服务器 ID=服务器 IP 地址：服务器之间通信端口：服务器之间投票选举端口
 
 #### 3）启动集群
 
-启动集群就是分别启动每个实例。
+启动集群就是分别启动每个实例，分别通过zhServer.sh start启动。
 
-![](./img/zk.png)
+### 2.3.2RPC服务接口
 
-
-
-### 2.3.2 RPC服务接口
+建立一个对外接口模块。
 
 ```java
 public interface IUserService {
-    public String sayHello(String name);
+
+    String sayHello(String name);
+
 }
 ```
 
-### 2.3.3 服务提供者
 
-#### 1）添加依赖
+
+### 2.3.3服务提供者
+
+**1）添加依赖**
 
 ```xml
-<parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>2.0.1.RELEASE</version>
-</parent>
-
 <dependencies>
-    <!--dubbo-->
-    <dependency>
-        <groupId>com.alibaba.spring.boot</groupId>
-        <artifactId>dubbo-spring-boot-starter</artifactId>
-        <version>2.0.0</version>
-    </dependency>
-	<!--spring-boot-stater-->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter</artifactId>
-        <exclusions>
-            <exclusion>
-                <artifactId>log4j-to-slf4j</artifactId>
-                <groupId>org.apache.logging.log4j</groupId>
-            </exclusion>
-        </exclusions>
-    </dependency>
-	<!--zookeeper-->
-    <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper</artifactId>
-        <version>3.4.10</version>
-        <exclusions>
-            <exclusion>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-log4j12</artifactId>
-            </exclusion>
-            <exclusion>
-                <groupId>log4j</groupId>
-                <artifactId>log4j</artifactId>
-            </exclusion>
-        </exclusions>
-    </dependency>
+  <dependency>
+      <groupId>com.alibaba.spring.boot</groupId>
+      <artifactId>dubbo-spring-boot-starter</artifactId>
+  </dependency>
+  <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+      <version>3.4.9</version>
+      <exclusions>
+          <exclusion>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+              <groupId>log4j</groupId>
+              <artifactId>log4j</artifactId>
+          </exclusion>
+      </exclusions>
+  </dependency>
 
-    <dependency>
-        <groupId>com.101tec</groupId>
-        <artifactId>zkclient</artifactId>
-        <version>0.9</version>
-        <exclusions>
-            <exclusion>
-                <artifactId>slf4j-log4j12</artifactId>
-                <groupId>org.slf4j</groupId>
-            </exclusion>
-        </exclusions>
-    </dependency>
-	<!--API-->
-    <dependency>
-        <groupId>com.itheima.demo</groupId>
-        <artifactId>dubbo-api</artifactId>
-        <version>1.0-SNAPSHOT</version>
-    </dependency>
+  <dependency>
+      <groupId>com.101tec</groupId>
+      <artifactId>zkclient</artifactId>
+      <version>0.9</version>
+      <exclusions>
+          <exclusion>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+      </exclusions>
+  </dependency>
 
+  <dependency>
+      <groupId>com.zsj</groupId>
+      <artifactId>rpc_api</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
 </dependencies>
 ```
 
-#### 2）配置文件
+**2）配置文件**
 
 ```properties
-# application.properties
-spring.application.name=dubbo-demo-provider
-spring.dubbo.application.id=dubbo-demo-provider
-spring.dubbo.application.name=dubbo-demo-provider
-spring.dubbo.registry.address=zookeeper://192.168.25.140:2181;zookeeper://192.168.25.140:2182;zookeeper://192.168.25.140:2183
+spring.application.name=dubbo-provider
+spring.dubbo.application.id=dubbo-provider
+spring.dubbo.application.name=dubbo-provider
+spring.dubbo.registry.address=zookeeper://115.159.6.108:2181
 spring.dubbo.server=true
 spring.dubbo.protocol.name=dubbo
 spring.dubbo.protocol.port=20880
 ```
 
-#### 3）启动类
+
+
+**3）启动类**
 
 ```java
-@EnableDubboConfiguration
 @SpringBootApplication
-public class ProviderBootstrap {
+@EnableDubboConfiguration
+public class RpcProducerApplication {
 
-    public static void main(String[] args) throws IOException {
-        SpringApplication.run(ProviderBootstrap.class,args);
+    public static void main(String[] args) {
+        SpringApplication.run(RpcProducerApplication.class, args);
     }
 
 }
 ```
 
-#### 4）服务实现
+
+
+**4）服务实现**
 
 ```java
 @Component
 @Service(interfaceClass = IUserService.class)
-public class UserServiceImpl implements IUserService{
+public class UserServiceImpl implements IUserService {
     @Override
     public String sayHello(String name) {
-        return "hello:"+name;
+        return "hello:" + name;
     }
 }
 ```
 
-### 2.3.4 服务消费者
+Service注解来自dubbo。
 
-#### 1）添加依赖
+
+
+### 2.3.4服务消费者
+
+**1）添加依赖**
 
 ```xml
-<parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.0.1.RELEASE</version>
-    </parent>
-
 <dependencies>
-
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!--dubbo-->
     <dependency>
         <groupId>com.alibaba.spring.boot</groupId>
         <artifactId>dubbo-spring-boot-starter</artifactId>
-        <version>2.0.0</version>
     </dependency>
-
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter</artifactId>
-        <exclusions>
-            <exclusion>
-                <artifactId>log4j-to-slf4j</artifactId>
-                <groupId>org.apache.logging.log4j</groupId>
-            </exclusion>
-        </exclusions>
-    </dependency>
-
-    <!--zookeeper-->
     <dependency>
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper</artifactId>
-        <version>3.4.10</version>
+        <version>3.4.9</version>
         <exclusions>
             <exclusion>
                 <groupId>org.slf4j</groupId>
@@ -431,67 +376,90 @@ public class UserServiceImpl implements IUserService{
         <version>0.9</version>
         <exclusions>
             <exclusion>
-                <artifactId>slf4j-log4j12</artifactId>
                 <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-log4j12</artifactId>
             </exclusion>
         </exclusions>
     </dependency>
 
-    <!--API-->
     <dependency>
-        <groupId>com.itheima.demo</groupId>
-        <artifactId>dubbo-api</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <groupId>com.zsj</groupId>
+        <artifactId>rpc_api</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
     </dependency>
-
 </dependencies>
 ```
 
-#### 2）配置文件
+
+
+**2）配置文件**
 
 ```properties
-# application.properties
-spring.application.name=dubbo-demo-consumer
-spring.dubbo.application.name=dubbo-demo-consumer
-spring.dubbo.application.id=dubbo-demo-consumer
-    spring.dubbo.registry.address=zookeeper://192.168.25.140:2181;zookeeper://192.168.25.140:2182;zookeeper://192.168.25.140:2183
+spring.application.name=dubbo-consumer
+spring.dubbo.application.name=dubbo-consumer
+spring.dubbo.application.id=dubbo-consumer
+
+spring.dubbo.registry.address=zookeeper://115.159.6.108:2181
 ```
 
-#### 3）启动类
+
+
+**3）启动类**
 
 ```java
-@EnableDubboConfiguration
 @SpringBootApplication
-public class ConsumerBootstrap {
+@EnableDubboConfiguration
+public class RpcConsumerApplication {
+
     public static void main(String[] args) {
-        SpringApplication.run(ConsumerBootstrap.class);
+        SpringApplication.run(RpcConsumerApplication.class, args);
     }
+
 }
 ```
 
-#### 4）Controller
+
+
+**4）Controller**
 
 ```java
 @RestController
-@RequestMapping("/user")
+@RequestMapping("user")
 public class UserController {
 
     @Reference
     private IUserService userService;
 
-    @RequestMapping("/sayHello")
-    public String sayHello(String name){
+    @GetMapping("hello")
+    public String hello(String name) {
         return userService.sayHello(name);
     }
 
 }
 ```
 
-# 3. 环境搭建
+测试：访问http://localhost:8080/user/hello?name=xxx
 
-## 3.1 数据库
 
-### 1）优惠券表
+
+# 3.环境搭建
+
+## 3.1数据库
+
+### 3.1.1优惠券表
+
+```sql
+create table coupon (
+	coupon_id bigint(50) not null primary key,
+ 	coupon_price decimal(10,2) null comment '优惠劵金额',
+  user_id bigint(50) null comment '用户id',
+  order_id bigint(50) null comment '订单id',
+  is_used int(1) null comment '是否使用,0未使用，1已使用',
+  used_time timestamp null comment '使用时间'
+)
+```
+
+
 
 | Field        | Type                | Comment                  |
 | ------------ | ------------------- | ------------------------ |
@@ -502,7 +470,20 @@ public class UserController {
 | is_used      | int(1) NULL         | 是否使用 0未使用 1已使用 |
 | used_time    | timestamp NULL      | 使用时间                 |
 
-### 2）商品表
+### 3.1.2商品表
+
+```sql
+create table goods (
+	goods_id bigint(50) not null primary key,
+  goods_name varchar(255) null comment '商品名称',
+  goods_number int(11) null comment '商品库存',
+  goods_price decimal(10,2) null comment '商品价格',
+  goods_desc varchar(255) null comment '商品描述',
+  add_time timestamp null comment '添加时间'
+)
+```
+
+
 
 | Field        | Type                | Comment  |
 | ------------ | ------------------- | -------- |
@@ -513,7 +494,34 @@ public class UserController {
 | goods_desc   | varchar(255) NULL   | 商品描述 |
 | add_time     | timestamp NULL      | 添加时间 |
 
-### 3）订单表
+### 3.1.3订单表
+
+```sql
+create table order (
+	order_id bigint(50) not null primary key comment '订单id',
+  user_id bigint(50) null comment '用户id',
+  order_status int(1) null comment '订单状态，0未确认，1已确认，2已取消，3无效，4退款',
+  pay_status int(1) null comment '支付状态，0未支付，1支付中，2已支付',
+ 	shipping_status int(1) null comment '发货状态，0未发货，1已发货，2已退款',
+  address varchar(255) null comment '收获地址'，
+  consignee varchar(255) null comment '收货人'，
+  goods_id bigint(50) null comment '商品id',
+  goods_number int(11) null comment '商品数量',
+  goods_price decimal(10,2) null comment '商品价格',
+  goods_amount decimal(10,0) null comment '商品总价',
+  shipping_fee decimal(10,2) null comment '运费',
+  order_amount decimal(10,2) null comment '订单价格',
+  coupon_id bigint(50) null comment '优惠劵id',
+  coupon_paid decimal(10,2) null comment '优惠劵',
+  money_paid decimal(10,2) null comment '已付金额',
+  pay_amount decimal(10,2) null comment '支付金额',
+  add_time timestamp null comment '创建时间',
+  confirm_time timestamp null comment '订单确认时间',
+  pay_time timestampe null comment '支付时间'
+)
+```
+
+
 
 | Field           | Type                | Comment                                      |
 | --------------- | ------------------- | -------------------------------------------- |
@@ -538,7 +546,18 @@ public class UserController {
 | confirm_time    | timestamp NULL      | 订单确认时间                                 |
 | pay_time        | timestamp NULL      | 支付时间                                     |
 
-### 4）订单商品日志表
+### 3.1.4订单商品日志表
+
+```sql
+create table order_goods_log(
+	goods_id int(11) not null comment '商品id',
+  order_id varchar(32) not null comment '订单id',
+  goods_number int(11) null comment '库存数量',
+  log_time datetime null comment '记录时间'
+)
+```
+
+
 
 | Field        | Type                 | Comment  |
 | ------------ | -------------------- | -------- |
@@ -547,29 +566,70 @@ public class UserController {
 | goods_number | int(11) NULL         | 库存数量 |
 | log_time     | datetime NULL        | 记录时间 |
 
-### 5）用户表
+### 
+
+### 3.1.5用户表
+
+```sql
+create table user (
+	user_id bigint(50) not null,
+  user_name varchar(255) null comment '用户姓名',
+  user_password varchar(255) null comment '用户密码',
+  user_mobile varchar(11) null comment '手机号',
+  user_score int(11) null comment '积分',
+  user_reg_time timestamp null comment '注册时间',
+  user_money decimal(10,2) null comment '用户余额'
+)
+```
+
+
 
 | Field         | Type                | Comment  |
-| ------------- | ------------------- | -------- |
-| user_id       | bigint(50) NOT NULL | 用户ID   |
+| ------------- | ------------------- | :------: |
+| user_id       | bigint(50) NOT NULL |  用户ID  |
 | user_name     | varchar(255) NULL   | 用户姓名 |
 | user_password | varchar(255) NULL   | 用户密码 |
-| user_mobile   | varchar(255) NULL   | 手机号   |
-| user_score    | int(11) NULL        | 积分     |
+| user_mobile   | varchar(255) NULL   |  手机号  |
+| user_score    | int(11) NULL        |   积分   |
 | user_reg_time | timestamp NULL      | 注册时间 |
 | user_money    | decimal(10,0) NULL  | 用户余额 |
 
-### 6）用户余额日志表
+### 3.1.6用户余额日志表
 
-| Field          | Type                | Comment                       |
-| -------------- | ------------------- | ----------------------------- |
-| user_id        | bigint(50) NOT NULL | 用户ID                        |
-| order_id       | bigint(50) NOT NULL | 订单ID                        |
-| money_log_type | int(1) NOT NULL     | 日志类型 1订单付款 2 订单退款 |
-| use_money      | decimal(10,2) NULL  | 操作金额                      |
-| create_time    | timestamp NULL      | 日志时间                      |
+```sql
+create table user_money_log (
+	user_id bigint(50) not null,
+  order_id bigint(50) not null,
+  money_log_type int(1) not null comment '日志类型，1订单付款，2订单退款',
+  use_money decimal(10,2) null comment '操作金额',
+  create_time timestamp null comment '日志时间'
+)
+```
 
-### 7）订单支付表
+
+
+| Field          |        Type         |            Comment            |
+| -------------- | :-----------------: | :---------------------------: |
+| user_id        | bigint(50) NOT NULL |            用户ID             |
+| order_id       | bigint(50) NOT NULL |            订单ID             |
+| money_log_type |   int(1) NOT NULL   | 日志类型 1订单付款 2 订单退款 |
+| use_money      | decimal(10,2) NULL  |           操作金额            |
+| create_time    |   timestamp NULL    |           日志时间            |
+
+### 
+
+### 3.1.7订单支付表
+
+```sql
+create table pay (
+	pay_id bigint(50) not null comment '支付编号',
+  order_id bigint(50) null comment '订单编号',
+  pay_amount decimal(10,2) null comment '支付金额'，
+  is_paid int(1) null comment '是否支付，1否，2是'
+)
+```
+
+
 
 | Field      | Type                | Comment            |
 | ---------- | ------------------- | ------------------ |
@@ -578,7 +638,22 @@ public class UserController {
 | pay_amount | decimal(10,2) NULL  | 支付金额           |
 | is_paid    | int(1) NULL         | 是否已支付 1否 2是 |
 
-### 8）MQ消息生产表
+### 3.1.8MQ消息生产表
+
+```sql
+create table mq_producer (
+	id varchar(100) not null primary key,
+  group_name varchar(100) null comment '生产者组名',
+  msg_topic varchar(100) null comment '消息主题',
+  msg_tag varchar(100) null comment 'Tag',
+  msg_key varchar(100) null comment 'Key',
+  msg_body varchar(500) null comment '消息内容',
+  msg_status int(1) null comment '处理状态',
+  create_time timestamp not null comment '记录时间'
+)
+```
+
+
 
 | Field       | Type                  | Comment             |
 | ----------- | --------------------- | ------------------- |
@@ -591,7 +666,23 @@ public class UserController {
 | msg_status  | int(1) NULL           | 0:未处理;1:已经处理 |
 | create_time | timestamp NOT NULL    | 记录时间            |
 
-###9）MQ消息消费表
+### 3.1.9MQ消息消费表
+
+```sql
+create table mq_consumer (
+	msg_id varchar(50) null,
+  group_name varchar(100) null comment '消费者组名',
+  msg_tag varchar(100) null comment 'Tag',
+  msg_key varchar(100) null comment 'Key',
+  msg_body varchar(500) null comment '消息体',
+  consumer_status int(1) null comment '处理状态，0正在处理，1处理成功，2处理失败',
+  consumer_times int(1) null comment '消费次数',
+  consumer_timestamp timestamp not null comment '消费时间',
+  remark varchar(500) null comment '备注'
+)
+```
+
+
 
 | Field              | Type                  | Comment                          |
 | ------------------ | --------------------- | -------------------------------- |
@@ -605,73 +696,53 @@ public class UserController {
 | consumer_timestamp | timestamp NULL        | 消费时间                         |
 | remark             | varchar(500) NULL     | 备注                             |
 
-## 3.2 项目初始化
+## 3.2项目初始化
 
-shop系统基于Maven进行项目管理
+### 3.2.1工程
 
-### 3.1.1 工程浏览
+- 父工程：shop_parent
+  - 订单系统：shop-order-web
+  - 支付系统：shop-pay-web
+  - 优惠劵服务：shop-coupon-service
+  - 订单服务：shop-order-service
+  - 支付服务：shop-pay-service
+  - 商品服务：shop-goods-service
+  - 用户服务：shop-user-service
+  - 实体类：shop-pojo
+  - 持久层：shop-dao
+  - 接口层：shop-api
+  - 工具工程：shop-common
 
-![](img/项目初始化.png)
+![image-20210526142756983](asserts/image-20210526142756983.png)
 
-- 父工程：shop-parent
-- 订单系统：shop-order-web
-- 支付系统：shop-pay-web
-- 优惠券服务：shop-coupon-service
-- 订单服务：shop-order-service
-- 支付服务：shop-pay-service
-- 商品服务：shop-goods-service
-- 用户服务：shop-user-service
-- 实体类：shop-pojo
-- 持久层：shop-dao
-- 接口层：shop-api
-- 工具工程：shop-common
+## 3.3Mybatis逆向工程
 
-共12个系统
+## 3.4公共类
 
-### 3.1.2 工程关系
-
-![](img/项目结构图.png)
-
-## 3.3 Mybatis逆向工程使用
-
-### 1）代码生成
-
-使用Mybatis逆向工程针对数据表生成CURD持久层代码
-
-### 2）代码导入
-
-* 将实体类导入到shop-pojo工程
-* 在服务层工程中导入对应的Mapper类和对应配置文件
-
-## 3.4 公共类介绍
-
-* ID生成器
+- ID生成器
 
   IDWorker：Twitter雪花算法
 
-* 异常处理类
+- 异常处理类
 
-  CustomerException：自定义异常类
+  - CustomerException：自定义异常类
+  - CastException：异常抛出类
 
-  CastException：异常抛出类
+- 常量类
 
-* 常量类
+  - ShopCode：系统状态类
 
-  ShopCode：系统状态类
+- 响应实体类
 
-* 响应实体类
+  - Result：封装响应状态和响应信息
 
-  Result：封装响应状态和响应信息
+# 4.下单业务
 
-# 4. 下单业务
+![image-20210525222012258](asserts/image-20210525222012258.png)
 
-![](img/下单时序图(2).png)
+## 4.1下单基本流程
 
-## 4.1 下单基本流程
-
-### 1）接口定义
-
-* IOrderService
+### 4.1.1接口定义
 
 ```java
 public interface IOrderService {
@@ -684,7 +755,7 @@ public interface IOrderService {
 }
 ```
 
-### 2）业务类实现
+### 4.1.2业务类实现
 
 ```java
 @Slf4j
@@ -719,9 +790,9 @@ public class OrderServiceImpl implements IOrderService {
 }
 ```
 
-### 3）校验订单
+### 4.1.3校验订单
 
-![](img/校验订单(2).png)
+![image-20210526143331292](asserts/image-20210526143331292.png)
 
 ```java
 private void checkOrder(TradeOrder order) {
@@ -752,9 +823,11 @@ private void checkOrder(TradeOrder order) {
 }
 ```
 
-### 4）生成预订单
 
-![](img/生成预订单.png)
+
+### 4.1.4生成预订单
+
+![image-20210603232645235](asserts/image-20210603232645235.png)
 
 ```java
 private Long savePreOrder(TradeOrder order) {
@@ -833,186 +906,196 @@ private Long savePreOrder(TradeOrder order) {
 }
 ```
 
-### 5）扣减库存
-
-* 通过dubbo调用商品服务完成扣减库存
-
-```java
-private void reduceGoodsNum(TradeOrder order) {
-        TradeGoodsNumberLog goodsNumberLog = new TradeGoodsNumberLog();
-        goodsNumberLog.setGoodsId(order.getGoodsId());
-        goodsNumberLog.setOrderId(order.getOrderId());
-        goodsNumberLog.setGoodsNumber(order.getGoodsNumber());
-        Result result = goodsService.reduceGoodsNum(goodsNumberLog);
-        if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
-            CastException.cast(ShopCode.SHOP_REDUCE_GOODS_NUM_FAIL);
-        }
-        log.info("订单:["+order.getOrderId()+"]扣减库存["+order.getGoodsNumber()+"个]成功");
-    }
-```
-
-* 商品服务GoodsService扣减库存
-
-```java
-@Override
-public Result reduceGoodsNum(TradeGoodsNumberLog goodsNumberLog) {
-    if (goodsNumberLog == null ||
-            goodsNumberLog.getGoodsNumber() == null ||
-            goodsNumberLog.getOrderId() == null ||
-            goodsNumberLog.getGoodsNumber() == null ||
-            goodsNumberLog.getGoodsNumber().intValue() <= 0) {
-        CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
-    }
-    TradeGoods goods = goodsMapper.selectByPrimaryKey(goodsNumberLog.getGoodsId());
-    if(goods.getGoodsNumber()<goodsNumberLog.getGoodsNumber()){
-        //库存不足
-        CastException.cast(ShopCode.SHOP_GOODS_NUM_NOT_ENOUGH);
-    }
-    //减库存
-    goods.setGoodsNumber(goods.getGoodsNumber()-goodsNumberLog.getGoodsNumber());
-    goodsMapper.updateByPrimaryKey(goods);
 
 
-    //记录库存操作日志
-    goodsNumberLog.setGoodsNumber(-(goodsNumberLog.getGoodsNumber()));
-    goodsNumberLog.setLogTime(new Date());
-    goodsNumberLogMapper.insert(goodsNumberLog);
+### 4.1.5扣减库存
 
-    return new Result(ShopCode.SHOP_SUCCESS.getSuccess(),ShopCode.SHOP_SUCCESS.getMessage());
-}
-```
+- 通过dubbo调用商品服务完成扣减库存
 
-### 6）扣减优惠券
+  ```java
+  private void reduceGoodsNum(TradeOrder order) {
+      TradeGoodsNumberLog goodsNumberLog = new TradeGoodsNumberLog();
+      goodsNumberLog.setGoodsId(order.getGoodsId());
+      goodsNumberLog.setOrderId(order.getOrderId());
+      goodsNumberLog.setGoodsNumber(order.getGoodsNumber());
+      Result result = goodsService.reduceGoodsNum(goodsNumberLog);
+      if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
+          CastException.cast(ShopCode.SHOP_REDUCE_GOODS_NUM_FAIL);
+      }
+      log.info("订单:["+order.getOrderId()+"]扣减库存["+order.getGoodsNumber()+"个]成功");
+  }
+  ```
 
-* 通过dubbo完成扣减优惠券
+- 商品服务GoodsService扣减库存
 
-```java
-private void changeCoponStatus(TradeOrder order) {
-    //判断用户是否使用优惠券
-    if (!StringUtils.isEmpty(order.getCouponId())) {
-        //封装优惠券对象
-        TradeCoupon coupon = couponService.findOne(order.getCouponId());
-        coupon.setIsUsed(ShopCode.SHOP_COUPON_ISUSED.getCode());
-        coupon.setUsedTime(new Date());
-        coupon.setOrderId(order.getOrderId());
-        Result result = couponService.changeCouponStatus(coupon);
-        //判断执行结果
-        if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
-            //优惠券使用失败
-            CastException.cast(ShopCode.SHOP_COUPON_USE_FAIL);
-        }
-        log.info("订单:["+order.getOrderId()+"]使用扣减优惠券["+coupon.getCouponPrice()+"元]成功");
-    }
+  ```java
+  @Override
+  public Result reduceGoodsNum(TradeGoodsNumberLog goodsNumberLog) {
+      if (goodsNumberLog == null ||
+              goodsNumberLog.getGoodsNumber() == null ||
+              goodsNumberLog.getOrderId() == null ||
+              goodsNumberLog.getGoodsNumber() == null ||
+              goodsNumberLog.getGoodsNumber().intValue() <= 0) {
+          CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
+      }
+      TradeGoods goods = goodsMapper.selectByPrimaryKey(goodsNumberLog.getGoodsId());
+      if(goods.getGoodsNumber()<goodsNumberLog.getGoodsNumber()){
+          //库存不足
+          CastException.cast(ShopCode.SHOP_GOODS_NUM_NOT_ENOUGH);
+      }
+      //减库存
+      goods.setGoodsNumber(goods.getGoodsNumber()-goodsNumberLog.getGoodsNumber());
+      goodsMapper.updateByPrimaryKey(goods);
+  
+  
+      //记录库存操作日志
+      goodsNumberLog.setGoodsNumber(-(goodsNumberLog.getGoodsNumber()));
+      goodsNumberLog.setLogTime(new Date());
+      goodsNumberLogMapper.insert(goodsNumberLog);
+  
+      return new Result(ShopCode.SHOP_SUCCESS.getSuccess(),ShopCode.SHOP_SUCCESS.getMessage());
+  }
+  ```
 
-}
-```
+  
 
-* 优惠券服务CouponService更改优惠券状态
+### 4.1.6扣减优惠劵
 
-```java
-@Override
-public Result changeCouponStatus(TradeCoupon coupon) {
-    try {
-        //判断请求参数是否合法
-        if (coupon == null || StringUtils.isEmpty(coupon.getCouponId())) {
-            CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
-        }
-		//更新优惠券状态为已使用
-        couponMapper.updateByPrimaryKey(coupon);
-        return new Result(ShopCode.SHOP_SUCCESS.getSuccess(), ShopCode.SHOP_SUCCESS.getMessage());
-    } catch (Exception e) {
-        return new Result(ShopCode.SHOP_FAIL.getSuccess(), ShopCode.SHOP_FAIL.getMessage());
-    }
-}
-```
+- 通过dubbo完成扣减优惠券
 
-### 7）扣减用户余额
+  ```java
+  private void changeCoponStatus(TradeOrder order) {
+      //判断用户是否使用优惠券
+      if (!StringUtils.isEmpty(order.getCouponId())) {
+          //封装优惠券对象
+          TradeCoupon coupon = couponService.findOne(order.getCouponId());
+          coupon.setIsUsed(ShopCode.SHOP_COUPON_ISUSED.getCode());
+          coupon.setUsedTime(new Date());
+          coupon.setOrderId(order.getOrderId());
+          Result result = couponService.changeCouponStatus(coupon);
+          //判断执行结果
+          if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
+              //优惠券使用失败
+              CastException.cast(ShopCode.SHOP_COUPON_USE_FAIL);
+          }
+          log.info("订单:["+order.getOrderId()+"]使用扣减优惠券["+coupon.getCouponPrice()+"元]成功");
+      }
+  
+  }
+  ```
 
-* 通过用户服务完成扣减余额
+  
 
-```java
-private void reduceMoneyPaid(TradeOrder order) {
-    //判断订单中使用的余额是否合法
-    if (order.getMoneyPaid() != null && order.getMoneyPaid().compareTo(BigDecimal.ZERO) == 1) {
-        TradeUserMoneyLog userMoneyLog = new TradeUserMoneyLog();
-        userMoneyLog.setOrderId(order.getOrderId());
-        userMoneyLog.setUserId(order.getUserId());
-        userMoneyLog.setUseMoney(order.getMoneyPaid());
-        userMoneyLog.setMoneyLogType(ShopCode.SHOP_USER_MONEY_PAID.getCode());
-        //扣减余额
-        Result result = userService.changeUserMoney(userMoneyLog);
-        if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
-            CastException.cast(ShopCode.SHOP_USER_MONEY_REDUCE_FAIL);
-        }
-        log.info("订单:["+order.getOrderId()+"扣减余额["+order.getMoneyPaid()+"元]成功]");
-    }
-}
-```
+- 优惠券服务CouponService更改优惠券状态
 
-* 用户服务UserService,更新余额
+  ```java
+  @Override
+  public Result changeCouponStatus(TradeCoupon coupon) {
+      try {
+          //判断请求参数是否合法
+          if (coupon == null || StringUtils.isEmpty(coupon.getCouponId())) {
+              CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
+          }
+  		//更新优惠券状态为已使用
+          couponMapper.updateByPrimaryKey(coupon);
+          return new Result(ShopCode.SHOP_SUCCESS.getSuccess(), ShopCode.SHOP_SUCCESS.getMessage());
+      } catch (Exception e) {
+          return new Result(ShopCode.SHOP_FAIL.getSuccess(), ShopCode.SHOP_FAIL.getMessage());
+      }
+  }
+  ```
 
-![](img/更改用户余额.png)
+  
 
-```java
-@Override
-public Result changeUserMoney(TradeUserMoneyLog userMoneyLog) {
-    //判断请求参数是否合法
-    if (userMoneyLog == null
-            || userMoneyLog.getUserId() == null
-            || userMoneyLog.getUseMoney() == null
-            || userMoneyLog.getOrderId() == null
-            || userMoneyLog.getUseMoney().compareTo(BigDecimal.ZERO) <= 0) {
-        CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
-    }
+### 4.1.7扣减用户余额
 
-    //查询该订单是否存在付款记录
-    TradeUserMoneyLogExample userMoneyLogExample = new TradeUserMoneyLogExample();
-    userMoneyLogExample.createCriteria()
-            .andUserIdEqualTo(userMoneyLog.getUserId())
-            .andOrderIdEqualTo(userMoneyLog.getOrderId());
-   int count = userMoneyLogMapper.countByExample(userMoneyLogExample);
-   TradeUser tradeUser = new TradeUser();
-   tradeUser.setUserId(userMoneyLog.getUserId());
-   tradeUser.setUserMoney(userMoneyLog.getUseMoney().longValue());
-   //判断余额操作行为
-   //【付款操作】
-   if (userMoneyLog.getMoneyLogType().equals(ShopCode.SHOP_USER_MONEY_PAID.getCode())) {
-           //订单已经付款，则抛异常
-           if (count > 0) {
-                CastException.cast(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY);
-            }
-       	   //用户账户扣减余额
-           userMapper.reduceUserMoney(tradeUser);
+- 通过用户服务完成扣减余额
+
+  ```java
+  private void reduceMoneyPaid(TradeOrder order) {
+      //判断订单中使用的余额是否合法
+      if (order.getMoneyPaid() != null && order.getMoneyPaid().compareTo(BigDecimal.ZERO) == 1) {
+          TradeUserMoneyLog userMoneyLog = new TradeUserMoneyLog();
+          userMoneyLog.setOrderId(order.getOrderId());
+          userMoneyLog.setUserId(order.getUserId());
+          userMoneyLog.setUseMoney(order.getMoneyPaid());
+          userMoneyLog.setMoneyLogType(ShopCode.SHOP_USER_MONEY_PAID.getCode());
+          //扣减余额
+          Result result = userService.changeUserMoney(userMoneyLog);
+          if (result.getSuccess().equals(ShopCode.SHOP_FAIL.getSuccess())) {
+              CastException.cast(ShopCode.SHOP_USER_MONEY_REDUCE_FAIL);
+          }
+          log.info("订单:["+order.getOrderId()+"扣减余额["+order.getMoneyPaid()+"元]成功]");
+      }
+  }
+  ```
+
+- 用户服务UserService,更新余额
+
+  ![image-20210603232645236](asserts/image-20210603232645236.png)
+
+  ```java
+  @Override
+  public Result changeUserMoney(TradeUserMoneyLog userMoneyLog) {
+      //判断请求参数是否合法
+      if (userMoneyLog == null
+              || userMoneyLog.getUserId() == null
+              || userMoneyLog.getUseMoney() == null
+              || userMoneyLog.getOrderId() == null
+              || userMoneyLog.getUseMoney().compareTo(BigDecimal.ZERO) <= 0) {
+          CastException.cast(ShopCode.SHOP_REQUEST_PARAMETER_VALID);
+      }
+  
+      //查询该订单是否存在付款记录
+      TradeUserMoneyLogExample userMoneyLogExample = new TradeUserMoneyLogExample();
+      userMoneyLogExample.createCriteria()
+              .andUserIdEqualTo(userMoneyLog.getUserId())
+              .andOrderIdEqualTo(userMoneyLog.getOrderId());
+     int count = userMoneyLogMapper.countByExample(userMoneyLogExample);
+     TradeUser tradeUser = new TradeUser();
+     tradeUser.setUserId(userMoneyLog.getUserId());
+     tradeUser.setUserMoney(userMoneyLog.getUseMoney().longValue());
+     //判断余额操作行为
+     //【付款操作】
+     if (userMoneyLog.getMoneyLogType().equals(ShopCode.SHOP_USER_MONEY_PAID.getCode())) {
+             //订单已经付款，则抛异常
+             if (count > 0) {
+                  CastException.cast(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY);
+              }
+         	   //用户账户扣减余额
+             userMapper.reduceUserMoney(tradeUser);
+         }
+      //【退款操作】
+      if (userMoneyLog.getMoneyLogType().equals(ShopCode.SHOP_USER_MONEY_REFUND.getCode())) {
+           //如果订单未付款,则不能退款,抛异常
+           if (count == 0) {
+           CastException.cast(ShopCode.SHOP_ORDER_PAY_STATUS_NO_PAY);
        }
-    //【退款操作】
-    if (userMoneyLog.getMoneyLogType().equals(ShopCode.SHOP_USER_MONEY_REFUND.getCode())) {
-         //如果订单未付款,则不能退款,抛异常
-         if (count == 0) {
-         CastException.cast(ShopCode.SHOP_ORDER_PAY_STATUS_NO_PAY);
-     }
-     //防止多次退款
-     userMoneyLogExample = new TradeUserMoneyLogExample();
-     userMoneyLogExample.createCriteria()
-             .andUserIdEqualTo(userMoneyLog.getUserId())
-                .andOrderIdEqualTo(userMoneyLog.getOrderId())
-                .andMoneyLogTypeEqualTo(ShopCode.SHOP_USER_MONEY_REFUND.getCode());
-     count = userMoneyLogMapper.countByExample(userMoneyLogExample);
-     if (count > 0) {
-         CastException.cast(ShopCode.SHOP_USER_MONEY_REFUND_ALREADY);
-     }
-     	//用户账户添加余额
-        userMapper.addUserMoney(tradeUser);
-    }
+       //防止多次退款
+       userMoneyLogExample = new TradeUserMoneyLogExample();
+       userMoneyLogExample.createCriteria()
+               .andUserIdEqualTo(userMoneyLog.getUserId())
+                  .andOrderIdEqualTo(userMoneyLog.getOrderId())
+                  .andMoneyLogTypeEqualTo(ShopCode.SHOP_USER_MONEY_REFUND.getCode());
+       count = userMoneyLogMapper.countByExample(userMoneyLogExample);
+       if (count > 0) {
+           CastException.cast(ShopCode.SHOP_USER_MONEY_REFUND_ALREADY);
+       }
+       	//用户账户添加余额
+          userMapper.addUserMoney(tradeUser);
+      }
+  
+  
+      //记录用户使用余额日志
+      userMoneyLog.setCreateTime(new Date());
+      userMoneyLogMapper.insert(userMoneyLog);
+      return new Result(ShopCode.SHOP_SUCCESS.getSuccess(),ShopCode.SHOP_SUCCESS.getMessage());
+  }
+  ```
 
+  
 
-    //记录用户使用余额日志
-    userMoneyLog.setCreateTime(new Date());
-    userMoneyLogMapper.insert(userMoneyLog);
-    return new Result(ShopCode.SHOP_SUCCESS.getSuccess(),ShopCode.SHOP_SUCCESS.getMessage());
-}
-```
-
-### 8）确认订单 
+### 4.1.8确认订单
 
 ```java
 private void updateOrderStatus(TradeOrder order) {
@@ -1027,7 +1110,9 @@ private void updateOrderStatus(TradeOrder order) {
 }
 ```
 
-### 9）小结
+
+
+### 4.1.9小结
 
 ```java
 @Override
@@ -1056,121 +1141,123 @@ public Result confirmOrder(TradeOrder order) {
 }
 ```
 
-## 4.2 失败补偿机制
 
-### 4.2.1 消息发送方
 
-* 配置RocketMQ属性值
+## 4.2失败补偿机制
 
-```properties
-rocketmq.name-server=192.168.25.135:9876;192.168.25.138:9876
-rocketmq.producer.group=orderProducerGroup
+### 4.2.1消息发送方
 
-mq.order.consumer.group.name=order_orderTopic_cancel_group
-mq.order.topic=orderTopic
-mq.order.tag.confirm=order_confirm
-mq.order.tag.cancel=order_cancel
-```
+- 配置RocketMQ属性值
 
-* 注入模板类和属性值信息
+  ```
+  rocketmq.name-server=192.168.25.135:9876;192.168.25.138:9876
+  rocketmq.producer.group=orderProducerGroup
+  
+  mq.order.consumer.group.name=order_orderTopic_cancel_group
+  mq.order.topic=orderTopic
+  mq.order.tag.confirm=order_confirm
+  mq.order.tag.cancel=order_cancel
+  ```
 
-```java
- @Autowired
- private RocketMQTemplate rocketMQTemplate;
+- 注入模板类和属性值信息
 
- @Value("${mq.order.topic}")
- private String topic;
+  ```java
+   @Autowired
+   private RocketMQTemplate rocketMQTemplate;
+  
+   @Value("${mq.order.topic}")
+   private String topic;
+  
+   @Value("${mq.order.tag.cancel}")
+   private String cancelTag;
+  ```
 
- @Value("${mq.order.tag.cancel}")
- private String cancelTag;
-```
+- 发送下单失败消息
 
-* 发送下单失败消息
+  ```java
+  @Override
+  public Result confirmOrder(TradeOrder order) {
+      //1.校验订单
+      //2.生成预订
+      try {
+          //3.扣减库存
+          //4.扣减优惠券
+          //5.使用余额
+          //6.确认订单
+      } catch (Exception e) {
+          //确认订单失败,发送消息
+          CancelOrderMQ cancelOrderMQ = new CancelOrderMQ();
+          cancelOrderMQ.setOrderId(order.getOrderId());
+          cancelOrderMQ.setCouponId(order.getCouponId());
+          cancelOrderMQ.setGoodsId(order.getGoodsId());
+          cancelOrderMQ.setGoodsNumber(order.getGoodsNumber());
+          cancelOrderMQ.setUserId(order.getUserId());
+          cancelOrderMQ.setUserMoney(order.getMoneyPaid());
+          try {
+              sendMessage(topic, 
+                          cancelTag, 
+                          cancelOrderMQ.getOrderId().toString(), 
+                      JSON.toJSONString(cancelOrderMQ));
+      } catch (Exception e1) {
+          e1.printStackTrace();
+              CastException.cast(ShopCode.SHOP_MQ_SEND_MESSAGE_FAIL);
+          }
+          return new Result(ShopCode.SHOP_FAIL.getSuccess(), ShopCode.SHOP_FAIL.getMessage());
+      }
+  }
+  
+  private void sendMessage(String topic, String tags, String keys, String body) throws Exception {
+      //判断Topic是否为空
+      if (StringUtils.isEmpty(topic)) {
+          CastException.cast(ShopCode.SHOP_MQ_TOPIC_IS_EMPTY);
+      }
+      //判断消息内容是否为空
+      if (StringUtils.isEmpty(body)) {
+          CastException.cast(ShopCode.SHOP_MQ_MESSAGE_BODY_IS_EMPTY);
+      }
+      //消息体
+      Message message = new Message(topic, tags, keys, body.getBytes());
+      //发送消息
+      rocketMQTemplate.getProducer().send(message);
+  }
+  ```
 
-```java
-@Override
-public Result confirmOrder(TradeOrder order) {
-    //1.校验订单
-    //2.生成预订
-    try {
-        //3.扣减库存
-        //4.扣减优惠券
-        //5.使用余额
-        //6.确认订单
-    } catch (Exception e) {
-        //确认订单失败,发送消息
-        CancelOrderMQ cancelOrderMQ = new CancelOrderMQ();
-        cancelOrderMQ.setOrderId(order.getOrderId());
-        cancelOrderMQ.setCouponId(order.getCouponId());
-        cancelOrderMQ.setGoodsId(order.getGoodsId());
-        cancelOrderMQ.setGoodsNumber(order.getGoodsNumber());
-        cancelOrderMQ.setUserId(order.getUserId());
-        cancelOrderMQ.setUserMoney(order.getMoneyPaid());
-        try {
-            sendMessage(topic, 
-                        cancelTag, 
-                        cancelOrderMQ.getOrderId().toString(), 
-                    JSON.toJSONString(cancelOrderMQ));
-    } catch (Exception e1) {
-        e1.printStackTrace();
-            CastException.cast(ShopCode.SHOP_MQ_SEND_MESSAGE_FAIL);
-        }
-        return new Result(ShopCode.SHOP_FAIL.getSuccess(), ShopCode.SHOP_FAIL.getMessage());
-    }
-}
-```
+  
 
-```java
-private void sendMessage(String topic, String tags, String keys, String body) throws Exception {
-    //判断Topic是否为空
-    if (StringUtils.isEmpty(topic)) {
-        CastException.cast(ShopCode.SHOP_MQ_TOPIC_IS_EMPTY);
-    }
-    //判断消息内容是否为空
-    if (StringUtils.isEmpty(body)) {
-        CastException.cast(ShopCode.SHOP_MQ_MESSAGE_BODY_IS_EMPTY);
-    }
-    //消息体
-    Message message = new Message(topic, tags, keys, body.getBytes());
-    //发送消息
-    rocketMQTemplate.getProducer().send(message);
-}
-```
+### 4.2.2消息接受方
 
-### 4.2.2 消费接收方
+- 配置RocketMQ属性值
 
-* 配置RocketMQ属性值
+  ```
+  rocketmq.name-server=192.168.25.135:9876;192.168.25.138:9876
+  mq.order.consumer.group.name=order_orderTopic_cancel_group
+  mq.order.topic=orderTopic
+  ```
 
-```properties
-rocketmq.name-server=192.168.25.135:9876;192.168.25.138:9876
-mq.order.consumer.group.name=order_orderTopic_cancel_group
-mq.order.topic=orderTopic
-```
+- 创建监听类，消费消息
 
-* 创建监听类，消费消息
-
-```java
-@Slf4j
-@Component
-@RocketMQMessageListener(topic = "${mq.order.topic}", 
-                         consumerGroup = "${mq.order.consumer.group.name}",
-                         messageModel = MessageModel.BROADCASTING)
-public class CancelOrderConsumer implements RocketMQListener<MessageExt>{
-
-    @Override
-    public void onMessage(MessageExt messageExt) {
-        ...
-    }
-}
-```
+  ```java
+  @Slf4j
+  @Component
+  @RocketMQMessageListener(topic = "${mq.order.topic}", 
+                           consumerGroup = "${mq.order.consumer.group.name}",
+                           messageModel = MessageModel.BROADCASTING)
+  public class CancelOrderConsumer implements RocketMQListener<MessageExt>{
+  
+      @Override
+      public void onMessage(MessageExt messageExt) {
+          ...
+      }
+  }
+  ```
 
 #### 1）回退库存
 
-* 流程分析
+- 流程分析
 
-![](img/回退库存.png)
+  ![image-20210603232645237](asserts/image-20210603232645237.png)
 
-* 消息消费者
+- 消息消费者
 
 ```java
 @Slf4j
@@ -1313,7 +1400,9 @@ public class CancelMQListener implements RocketMQListener<MessageExt>{
 }
 ```
 
-#### 2）回退优惠券
+
+
+#### 2）回退优惠劵
 
 ```java
 @Slf4j
@@ -1349,6 +1438,8 @@ public class CancelMQListener implements RocketMQListener<MessageExt>{
     }
 }
 ```
+
+
 
 #### 3）回退余额
 
@@ -1389,6 +1480,8 @@ public class CancelMQListener implements RocketMQListener<MessageExt>{
 }
 ```
 
+
+
 #### 4）取消订单
 
 ```java
@@ -1406,11 +1499,14 @@ public class CancelMQListener implements RocketMQListener<MessageExt>{
         log.info("订单:["+order.getOrderId()+"]状态设置为取消");
         return order;
     }
+
 ```
 
-## 4.3 测试
 
-### 1）准备测试环境
+
+## 4.3测试
+
+### 4.3.1准备测试环境
 
 ```java
 @RunWith(SpringRunner.class)
@@ -1422,13 +1518,13 @@ public class OrderTest {
 }
 ```
 
-###1）准备测试数据
+#### 1）准备测试数据
 
-* 用户数据
-* 商品数据
-* 优惠券数据
+- 用户数据
+- 商品数据
+- 优惠券数据
 
-###2）测试下单成功流程
+#### 2）测试下单成功流程
 
 ```java
 @Test    
@@ -1453,17 +1549,17 @@ public void add(){
 
 执行完毕后,查看数据库中用户的余额、优惠券数据，及订单的状态数据
 
-###3）测试下单失败流程
+#### 3）测试下单失败流程
 
 代码同上。
 
 执行完毕后，查看用户的余额、优惠券数据是否发生更改，订单的状态是否为取消。
 
-# 5. 支付业务
+# 5.支付业务
 
-## 5.1 创建支付订单
+## 5.1创建支付订单
 
-![](img/创建支付订单.png)
+![image-20210603232645238](asserts/image-20210603232645238.png)
 
 ```java
 public Result createPayment(TradePay tradePay) {
@@ -1490,13 +1586,15 @@ public Result createPayment(TradePay tradePay) {
 }
 ```
 
-## 5.2 支付回调 
 
-### 5.2.1 流程分析
 
-![](img/12.支付后回调.png)
+## 5.2支付回调
 
-### 5.2.2 代码实现
+### 5.2.1流程分析
+
+![image-20210603232645239](asserts/image-20210603232645239.png)
+
+### 5.2.2代码实现
 
 ```java
 public Result callbackPayment(TradePay tradePay) {
@@ -1547,61 +1645,61 @@ public Result callbackPayment(TradePay tradePay) {
 
 #### 线程池优化消息发送逻辑
 
-* 创建线程池对象
+- 创建线程池对象
 
-```java
-@Bean
-public ThreadPoolTaskExecutor getThreadPool() {
+  ```java
+  @Bean
+  public ThreadPoolTaskExecutor getThreadPool() {
+  
+      ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+  
+      executor.setCorePoolSize(4);
+  
+      executor.setMaxPoolSize(8);
+  
+      executor.setQueueCapacity(100);
+  
+      executor.setKeepAliveSeconds(60);
+  
+      executor.setThreadNamePrefix("Pool-A");
+  
+      executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+  
+      executor.initialize();
+  
+      return executor;
+  
+  }
+  ```
 
-    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+  
 
-    executor.setCorePoolSize(4);
+- 使用线程池
 
-    executor.setMaxPoolSize(8);
+  ```java
+  @Autowired
+  private ThreadPoolTaskExecutor executorService;
+  
+  executorService.submit(new Runnable() {
+      @Override
+      public void run() {
+          try {
+              SendResult sendResult = sendMessage(topic, tag, finalTradePay.getPayId(), JSON.toJSONString(finalTradePay));
+              log.info(JSON.toJSONString(sendResult));
+              if (SendStatus.SEND_OK.equals(sendResult.getSendStatus())) {
+                  mqProducerTempMapper.deleteByPrimaryKey(mqProducerTemp.getId());
+                  System.out.println("删除消息表成功");
+              }
+          } catch (Exception e) {
+              e.printStackTrace();
+          }
+      }
+  });
+  ```
 
-    executor.setQueueCapacity(100);
+  
 
-    executor.setKeepAliveSeconds(60);
-
-    executor.setThreadNamePrefix("Pool-A");
-
-    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-
-    executor.initialize();
-
-    return executor;
-
-}
-```
-
-* 使用线程池
-
-```java
-@Autowired
-private ThreadPoolTaskExecutor executorService;
-
-executorService.submit(new Runnable() {
-    @Override
-    public void run() {
-        try {
-            SendResult sendResult = sendMessage(topic, tag, finalTradePay.getPayId(), JSON.toJSONString(finalTradePay));
-            log.info(JSON.toJSONString(sendResult));
-            if (SendStatus.SEND_OK.equals(sendResult.getSendStatus())) {
-                mqProducerTempMapper.deleteByPrimaryKey(mqProducerTemp.getId());
-                System.out.println("删除消息表成功");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-});
-```
-
-
-
-### 5.2.3 
-
-### 处理消息
+### 5.2.3处理消息
 
 支付成功后，支付服务payService发送MQ消息，订单服务、用户服务、日志服务需要订阅消息进行处理
 
@@ -1613,80 +1711,84 @@ executorService.submit(new Runnable() {
 
 #### 1）配置RocketMQ属性值
 
-```properties
+```
 mq.pay.topic=payTopic
 mq.pay.consumer.group.name=pay_payTopic_group
 ```
 
 #### 2）消费消息
 
-* 在订单服务中，配置公共的消息处理类
+- 在订单服务中，配置公共的消息处理类
 
-```java
-public class BaseConsumer {
+  ```java
+  public class BaseConsumer {
+  
+      public TradeOrder handleMessage(IOrderService 
+                                      orderService, 
+                                      MessageExt messageExt,Integer code) throws Exception {
+          //解析消息内容
+          String body = new String(messageExt.getBody(), "UTF-8");
+          String msgId = messageExt.getMsgId();
+          String tags = messageExt.getTags();
+          String keys = messageExt.getKeys();
+          OrderMQ orderMq = JSON.parseObject(body, OrderMQ.class);
+          
+          //查询
+          TradeOrder order = orderService.findOne(orderMq.getOrderId());
+  
+          if(ShopCode.SHOP_ORDER_MESSAGE_STATUS_CANCEL.getCode().equals(code)){
+              order.setOrderStatus(ShopCode.SHOP_ORDER_CANCEL.getCode());
+          }
+  
+          if(ShopCode.SHOP_ORDER_MESSAGE_STATUS_ISPAID.getCode().equals(code)){
+              order.setPayStatus(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY.getCode());
+          }
+          orderService.changeOrderStatus(order);
+          return order;
+      }
+  
+  }
+  ```
 
-    public TradeOrder handleMessage(IOrderService 
-                                    orderService, 
-                                    MessageExt messageExt,Integer code) throws Exception {
-        //解析消息内容
-        String body = new String(messageExt.getBody(), "UTF-8");
-        String msgId = messageExt.getMsgId();
-        String tags = messageExt.getTags();
-        String keys = messageExt.getKeys();
-        OrderMQ orderMq = JSON.parseObject(body, OrderMQ.class);
-        
-        //查询
-        TradeOrder order = orderService.findOne(orderMq.getOrderId());
+  
 
-        if(ShopCode.SHOP_ORDER_MESSAGE_STATUS_CANCEL.getCode().equals(code)){
-            order.setOrderStatus(ShopCode.SHOP_ORDER_CANCEL.getCode());
-        }
+- 接受订单支付成功消息
 
-        if(ShopCode.SHOP_ORDER_MESSAGE_STATUS_ISPAID.getCode().equals(code)){
-            order.setPayStatus(ShopCode.SHOP_ORDER_PAY_STATUS_IS_PAY.getCode());
-        }
-        orderService.changeOrderStatus(order);
-        return order;
-    }
+  ```java
+  @Slf4j
+  @Component
+  @RocketMQMessageListener(topic = "${mq.pay.topic}", 
+                           consumerGroup = "${mq.pay.consumer.group.name}")
+  public class PayConsumer extends BaseConsumer implements RocketMQListener<MessageExt> {
+  
+      @Autowired
+      private IOrderService orderService;
+  
+      @Override
+      public void onMessage(MessageExt messageExt) {
+          try {
+              log.info("CancelOrderProcessor receive message:"+messageExt);
+              TradeOrder order = handleMessage(orderService, 
+                                               messageExt, 
+                                               ShopCode.SHOP_ORDER_MESSAGE_STATUS_ISPAID.getCode());
+              log.info("订单:["+order.getOrderId()+"]支付成功");
+          } catch (Exception e) {
+              e.printStackTrace();
+              log.error("订单支付失败");
+          }
+      }
+  }
+  ```
 
-}
-```
+  
 
-* 接受订单支付成功消息
-
-```java
-@Slf4j
-@Component
-@RocketMQMessageListener(topic = "${mq.pay.topic}", 
-                         consumerGroup = "${mq.pay.consumer.group.name}")
-public class PayConsumer extends BaseConsumer implements RocketMQListener<MessageExt> {
-
-    @Autowired
-    private IOrderService orderService;
-
-    @Override
-    public void onMessage(MessageExt messageExt) {
-        try {
-            log.info("CancelOrderProcessor receive message:"+messageExt);
-            TradeOrder order = handleMessage(orderService, 
-                                             messageExt, 
-                                             ShopCode.SHOP_ORDER_MESSAGE_STATUS_ISPAID.getCode());
-            log.info("订单:["+order.getOrderId()+"]支付成功");
-        } catch (Exception e) {
-            e.printStackTrace();
-            log.error("订单支付失败");
-        }
-    }
-}
-```
-
-# 6. 整体联调
+# 6.联调
 
 通过Rest客户端请求shop-order-web和shop-pay-web完成下单和支付操作
 
-## 6.1 准备工作
+## 6.1准备工作
 
-### 1）配置RestTemplate类
+### 6.1.1配置RestTemplate类
 
 ```java
 @Configuration
@@ -1725,77 +1827,80 @@ public class RestTemplateConfig {
 }
 ```
 
-### 2）配置请求地址
+### 6.1.2配置请求地址
 
-* 订单系统
+- 订单系统
 
-```properties
-server.host=http://localhost
-server.servlet.path=/order-web
-server.port=8080
-shop.order.baseURI=${server.host}:${server.port}${server.servlet.path}
-shop.order.confirm=/order/confirm
-```
+  ```
+  server.host=http://localhost
+  server.servlet.path=/order-web
+  server.port=8080
+  shop.order.baseURI=${server.host}:${server.port}${server.servlet.path}
+  shop.order.confirm=/order/confirm
+  
+  ```
 
-* 支付系统
+- 支付系统
 
-```properties
-server.host=http://localhost
-server.servlet.path=/pay-web
-server.port=9090
-shop.pay.baseURI=${server.host}:${server.port}${server.servlet.path}
-shop.pay.createPayment=/pay/createPayment
-shop.pay.callbackPayment=/pay/callbackPayment
-```
+  ```
+  server.host=http://localhost
+  server.servlet.path=/pay-web
+  server.port=9090
+  shop.pay.baseURI=${server.host}:${server.port}${server.servlet.path}
+  shop.pay.createPayment=/pay/createPayment
+  shop.pay.callbackPayment=/pay/callbackPayment
+  ```
 
-## 6.2 下单测试
+## 6.2下单测试
 
- ```java
+```java
 @RunWith(SpringRunner.class)
 @ContextConfiguration(classes = ShopOrderWebApplication.class)
 @TestPropertySource("classpath:application.properties")
 public class OrderTest {
 
-    @Autowired
-    private RestTemplate restTemplate;
+   @Autowired
+   private RestTemplate restTemplate;
 
-    @Value("${shop.order.baseURI}")
-    private String baseURI;
+   @Value("${shop.order.baseURI}")
+   private String baseURI;
 
-    @Value("${shop.order.confirm}")
-    private String confirmOrderPath;
+   @Value("${shop.order.confirm}")
+   private String confirmOrderPath;
 
-    @Autowired
-    private IDWorker idWorker;
-   
-   /**
-     * 下单
-     */
-    @Test
-    public void confirmOrder(){
-        Long goodsId=XXXL;
-        Long userId=XXXL;
-        Long couponId=XXXL;
+   @Autowired
+   private IDWorker idWorker;
+  
+  /**
+    * 下单
+    */
+   @Test
+   public void confirmOrder(){
+       Long goodsId=XXXL;
+       Long userId=XXXL;
+       Long couponId=XXXL;
 
-        TradeOrder order = new TradeOrder();
-        order.setGoodsId(goodsId);
-        order.setUserId(userId);
-        order.setGoodsNumber(1);
-        order.setAddress("北京");
-        order.setGoodsPrice(new BigDecimal("5000"));
-        order.setOrderAmount(new BigDecimal("5000"));
-        order.setMoneyPaid(new BigDecimal("100"));
-        order.setCouponId(couponId);
-        order.setShippingFee(new BigDecimal(0));
+       TradeOrder order = new TradeOrder();
+       order.setGoodsId(goodsId);
+       order.setUserId(userId);
+       order.setGoodsNumber(1);
+       order.setAddress("北京");
+       order.setGoodsPrice(new BigDecimal("5000"));
+       order.setOrderAmount(new BigDecimal("5000"));
+       order.setMoneyPaid(new BigDecimal("100"));
+       order.setCouponId(couponId);
+       order.setShippingFee(new BigDecimal(0));
 
-        Result result = restTemplate.postForEntity(baseURI + confirmOrderPath, order, Result.class).getBody();
-        System.out.println(result);
-    }
+       Result result = restTemplate.postForEntity(baseURI + confirmOrderPath, order, Result.class).getBody();
+       System.out.println(result);
+   }
 
 }
- ```
+```
 
-## 6.3 支付测试
+
+
+## 6.3支付测试
 
 ```java
 @RunWith(SpringRunner.class)
@@ -1849,4 +1954,6 @@ public class PayTest {
 
 }
 ```
+
+
 
