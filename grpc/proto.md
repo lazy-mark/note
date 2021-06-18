@@ -20,7 +20,10 @@ message OrderRequest {
 
 ### 定义字段类型
 
-从上面的例子，所有的字段类型都是标量类型，两个整数和字符串。但是也支持复合类型，其中包括枚举和其它消息类型。
+分为标量类型和复合类型。
+
+- 标量类型详见[标量值类型](#index)
+- 复合类型其中包括枚举和其它消息类型。
 
 
 
@@ -32,6 +35,10 @@ message OrderRequest {
 - 16-2047之间的字段编号占用两个字段。
 
 因此，非常频繁出现的消息元素保留数字 1 到 15，为将来可能添加的频繁出现的元素留出一些空间。
+
+
+
+> 注意：如果在开发中修改了客户端或者服务端其中一个端中某个字段的编号，那么会导致传递该字段值时为空，需要特别注意，修改字段需确保两个端所使用的字段编号一致。
 
 
 
@@ -66,8 +73,8 @@ message OrderRequest {
 使用C/C++的风格。
 
 ```protobuf
-/* SearchRequest represents a search query, with pagination options to
- * indicate which results to include in the response. */
+/* xxx
+ * xxx */
 
 message SearchRequest {
   string query = 1;
@@ -94,18 +101,18 @@ message SearchRequest {
   int32 result_per_page = 3;  // Number of results to return per page.
   int32 keys = 4;
   reserved 4; // 将字段编号为4作为保留字段，使其字段不能被使用
-  reserved result_per_page
+  reserved result_per_page;
   reserved 3 to max;
 }
 ```
 
 
 
-注意：同一个`reserved`语句不能同时使用字段名称和字段编号。
+注意：同一个`reserved`语句不能同时使用字段名称和字段编号。【测试字段名称好像不行】
 
 
 
-### 标量值类型
+### 标量值类型{#index}
 
 | .proto Type | Java Type  |                             备注                             |
 | :---------: | :--------: | :----------------------------------------------------------: |
@@ -125,10 +132,14 @@ message SearchRequest {
 |   string    |   String   |         字符串必须始终包含UTF-8编码或7位ASCII文本。          |
 |    bytes    | ByteString |                     可以包含任意字节序列                     |
 
+在Protocol Buffer Encoding序列化消息时，可以找到有关类型如何编码的信息。
+
 - 在java中，无符号32位和64位整型被表示成他们的整型对应形式，最高位被储存在标志位中。
 - 对于所有的情况，设定值会执行类型检查以确保此值是有效。
 - 64位或者无符号32位整型在解码时被表示成为ilong，但是在设置时可以使用int型值设定，在所有的情况下，值必须符合其设置其类型的要求。
 - Integer在64位的机器上使用，string在32位机器上使用。
+
+对于原始类型，不生成hasXXX方法，对于原始类型如果想要使用hasXXX方法，需要使用[wrappers.proto](https://github.com/google/protobuf/blob/master/src/google/protobuf/wrappers.proto)里的类型。
 
 
 
@@ -142,11 +153,13 @@ message SearchRequest {
 - 对于数字类型，默认值为0。
 - 对于枚举，默认值为第一个定义的枚举值，必须为0。
 - 重复字段的默认值为空列表。
-- 对于消息类型（message），没有被设置，和语言有关。
+- 对于消息类型（message），没有被设置，和语言有关【java中是一个未进行setter的对象】。
 
 
 
-注意：对于标量消息字段，一旦解析了消息，就无法判断字段是否明确设置为默认值。例如：不应该定义boolean的默认值为false作为任何行为的触发方式，如果一个标量类型字段被设置为标记位，这个值不应该被序列化传输。
+> 注意：对于标量消息字段，一旦解析了消息，就无法判断字段是否明确设置为默认值。
+
+例如：不应该定义boolean的默认值为false作为任何行为的触发方式，如果一个标量类型字段被设置为标记位，这个值不应该被序列化传输。
 
 
 
@@ -163,10 +176,6 @@ message SearchRequest {
     UNIVERSAL = 0;
     WEB = 1;
     IMAGES = 2;
-    LOCAL = 3;
-    NEWS = 4;
-    PRODUCTS = 5;
-    VIDEO = 6;
   }
   Corpus corpus = 4;
 }
@@ -267,7 +276,7 @@ message MyMessage3 {
 - 如果添加新字段，使用“旧”消息格式的代码序列化的任何消息仍可以由新生成的代码解析，你应该记住这些元素的默认值，以便新代码可以与旧代码生成的消息正确交互。
 - 只要在更新的消息类型中不再使用字段编号，就可以删除字段。您可能想要重命名该字段，也许添加前缀“OBSOLETE_”，或者保留字段编号，以便您的未来用户`.proto`不会意外地重复使用该编号。
 - `int32`、`uint32`、`int64`、`uint64`和`bool`都兼容 - 这意味着您可以将字段从这些类型中的一种更改为另一种，而不会破坏向前或向后的兼容性。如果从连线中解析出的数字不适合相应类型，您将获得与在 C++ 中将该数字强制转换为该类型相同的效果（例如，如果将 64 位数字读取为 int32，它将被截断为 32 位）。
-- `sint32`并且`sint64`彼此兼容，但与其他整数类型*不*兼容。
+- `sint32`并且`sint64`彼此兼容，但与其他整数类型不兼容。
 - `string`并且`bytes`只要字节是有效的 UTF-8 就兼容。
 - `bytes`如果字节包含消息的编码版本，则嵌入的消息兼容。
 - `fixed32`与兼容`sfixed32`，并`fixed64`用`sfixed64`。
@@ -303,7 +312,7 @@ message Open {
 }
 ```
 
-可以在定义消息类型的字段时使用包说明符：
+可以在定义消息类型的字段时使用包说明符。
 
 ```protobuf
 message Foo {
@@ -324,6 +333,31 @@ service SearchService {
 ```
 
 最直观的使用protocol buffer的RPC系统是gRpc一个由谷歌开发的语言和平台中的开源的PRC系统，gRPC在使用protocol buffer时非常有效，如果使用特殊的protocol buffer插件可以直接为您从.proto文件中产生相关的RPC代码。
+
+
+
+请求参数为空在GRPC中如何定义呢？
+
+google protobuf已经提供了空参数
+
+```protobuf
+google.protobuf.Empty
+```
+
+本质上就是
+
+```protobuf
+message Empty {}
+```
+
+例子：
+
+```protobuf
+import "google/protobuf/empty.proto";
+service SearchService {
+  rpc Search(google.protobuf.Empty) returns (SearchResponse);
+}
+```
 
 
 
