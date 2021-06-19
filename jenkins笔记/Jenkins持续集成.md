@@ -95,3 +95,116 @@ Jenkins的特征：
 
 ## Jenkins安装和持续集成环境配置
 
+### 持续集成流程
+
+![image-20210619001156756](assert/image-20210619001156756.png)
+
+1）首先，开发人员每天进行代码提交，提交到Git仓库；
+
+2）然后，Jenkins作为持续集成工具，使用Git工具到Git仓库拉取代码到集成服务器，再配合JDK，
+
+Maven等软件完成代码编译，代码测试与审查，测试，打包等工作，在这个过程中每一步出错，都重新
+
+再执行一次整个流程；
+
+3）最后，Jenkins把生成的jar或war包分发到测试服务器或者生产服务器，测试人员或用户就可以访问
+
+应用。
+
+
+
+### 服务器列表
+
+|      名称      | IP地址 |                     安装的软件                      |
+| :------------: | :----: | :-------------------------------------------------: |
+| 代码托管服务器 |  XXX   |                    Gitlab-12.4.2                    |
+| 持续集成服务器 |  XXX   | Jenkins-2.190.3、JDK1.8、Maven3.6.2、Git、SonarQube |
+| 应用测试服务器 |  XXX   |                  JDK1.8，Tomcat8.5                  |
+
+
+
+### Gitlab代码托管服务器安装
+
+#### Gitlab简介
+
+GitLab 是一个用于仓库管理系统的开源项目，使用Git作为代码管理工具，并在此基础上搭建起来的
+
+web服务。
+
+
+
+GitLab和GitHub一样属于第三方基于Git开发的作品，免费且开源（基于MIT协议），与Github类似，
+
+可以注册用户，任意提交你的代码，添加SSHKey等等。不同的是，**GitLab是可以部署到自己的服务器**
+
+**上，数据库等一切信息都掌握在自己手上，适合团队内部协作开发**，你总不可能把团队内部的智慧总放
+
+在别人的服务器上吧？简单来说可把GitLab看作个人版的GitHub。
+
+
+
+#### Gitlab安装
+
+1. 安装相关依赖
+
+   ```bash
+   yum -y install policycoreutils openssh-server openssh-clients postfix
+   ```
+
+2.  启动ssh服务&设置为开机启动
+
+   ```bash
+   systemctl enable sshd && sudo systemctl start sshd
+   ```
+
+3. 设置postfifix开机自启，并启动，postfifix支持gitlab发信功能
+
+   ```bash
+   systemctl enable postfix && systemctl start postfix
+   ```
+
+4. 开放ssh以及http服务，然后重新加载防火墙列表【如果防火墙关闭，则不需要配置】
+
+   ```bash
+   firewall-cmd --add-service=ssh --permanent
+   firewall-cmd --add-service=http --permanent
+   firewall-cmd --reload
+   ```
+
+5. 下载gitlab包，并且安装
+
+   ```bash
+   wget https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el6/gitlab-ce-12.4.2-ce.0.el6.x86_64.rpm
+   rpm -i gitlab-ce-12.4.2-ce.0.el6.x86_64.rpm
+   ```
+
+6. 修改gitlab配置
+
+   ```bash
+   vi /etc/gitlab/gitlab.rb
+   ```
+
+   修改gitlab访问地址和端口，默认为80，我们改为9999
+
+   external_url 'http://ipv4:9999'
+
+   nginx['listen_port'] = 9999
+
+7. 重载配置及启动gitlab
+
+   ```bash
+   gitlab-ctl reconfigure
+   gitlab-ctl restart
+   ```
+
+8. 把端口添加到防火墙【如果防火墙关闭，则不需要配置】
+
+   ```bash
+   firewall-cmd --zone=public --add-port=82/tcp --permanent
+   firewall-cmd --reload
+   ```
+
+
+
+启动成功后，看到以下修改管理员root密码的页面，修改密码后，然后登录即可。
+
