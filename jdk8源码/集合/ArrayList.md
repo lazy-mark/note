@@ -2,7 +2,7 @@
 
 ## 概述
 
-ArrayList是Java集合框架的一个成员，ArrayList在jdk1.7和1.8做了一些变动，主要针对的是扩容。
+ArrayList是Collection框架的一个成员，ArrayList在jdk1.7和1.8做了一些变动，主要针对的是扩容。
 
 
 
@@ -48,9 +48,56 @@ ArrayList的元素存储在数组中，后面的增删操作都是基于该字�
 
 ### 添加
 
+向ArrayList中添加一个元素，主要分为三步：判断容器+进行扩容、拷贝、添加元素。
 
+```java
+public boolean add(E e) {
+    ensureCapacityInternal(size + 1);
+    elementData[size++] = e;
+    return true;
+}
+```
+
+
+
+![image-20210706225129528](asserts/image-20210706225129528.png)
+
+
+
+向ArrayList指定位置添加一个元素，大致的流程和上图一致。
+
+1. 确保位置正常；
+2. 确保容器足够；
+3. 通过拷贝移动元素【原地移位】，原数组中该位置的元素往后挪一位，该位置空留出用来保存要添加的元素；
+
+执行addXX方法时，修改都会被加1，多线程并发修改时，会触发fast-fail；
+
+在Java中，原地移动元素通过System#arraycopy实现，它是一个native方法，通过C/C++实现；
 
 ### 删除
+
+删除指定位置中的元素。
+
+```java
+public E remove(int index) {
+    rangeCheck(index);
+
+    modCount++;
+    E oldValue = elementData(index);
+
+    int numMoved = size - index - 1;
+    if (numMoved > 0)
+        System.arraycopy(elementData, index+1, elementData, index,
+                         numMoved);
+    elementData[--size] = null; // clear to let GC do its work
+
+    return oldValue;
+}
+```
+
+1. 判断位置是否正确；
+2. 计算是否需要移动元素；【删除最后一个元素不需要移动】
+3. 返回原数据；
 
 
 
@@ -118,4 +165,8 @@ public int indexOf(Object o) {
 例如：假设存在两个线程(线程A和线程B)，线程A在Iterator遍历集合A中的元素，在某个时候线程B修改了集合A的结构（是结构上的修改，而不是简单的修改集合元素的内容），那么程序就会抛出并发修改异常。
 
 要了解fail-fast机制，首先要对ConcurrentModificationException异常有所了解。当方法检测到对象的并发修改，但不允许这种修改就抛出该异常。在单线程情况下，如果在forEach遍历的时候使用add/remove方法，也有机会抛出该异常。
+
+
+
+## Spliterator
 
