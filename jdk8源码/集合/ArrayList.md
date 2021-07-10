@@ -158,6 +158,28 @@ public int indexOf(Object o) {
 
 
 
+### 缩容
+
+```java
+public void trimToSize() {
+    modCount++;
+    if (size < elementData.length) {
+        elementData = (size == 0) ? EMPTY_ELEMENTDATA : Arrays.copyOf(elementData, size);
+    }
+}
+```
+
+当数组添加到1万大小，就添加了一个元素，触发了一次扩容，容量变为1.5万，浪费了4900个内存空间，此时通过缩容即可避免多余内存空间的消耗。
+
+引发的问题：
+
+- 缩容操作需要对原数组进行拷贝，存在时间消耗；
+- 缩容操作后，如果还需要添加元素，还需要触发一次扩容操作；
+
+因此，大部分场景中是不需要进行缩容的。
+
+
+
 ## 快速失败机制
 
 “快速失败”也就是fail-fast，它是Java集合的一种错误检测机制。当多个线程对集合进行结构上改变的操作时，有可能会产生fail-fast机制。
@@ -168,5 +190,103 @@ public int indexOf(Object o) {
 
 
 
-## Spliterator
+## 多线程安全问题
+
+例子：线程A、线程B同时向ArrayList中添加元素；
+
+```java
+public void testTwoThread() throws InterruptedException {
+    List<String> strings = new ArrayList<>();
+    Thread t1 = new Thread(() -> {
+        for (int j = 0; j < 1000; j++) {
+            strings.add(String.valueOf(j));
+            try {
+                // 提高线程t2执行
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    });
+    t1.start();
+
+    Thread t2 = new Thread(() -> {
+        for (int i = 1000; i < 2000; i++) {
+            strings.add(String.valueOf(i));
+            try {
+                // 提高线程t1执行
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    });
+
+    t2.start();
+	
+    t1.join();
+    t2.join();
+
+    System.out.println(strings.size());
+}
+```
+
+这个例子中，创建了线程t1和线程t2两个线程，并且t1和t2线程都优先于主线程执行，可确保元素已经添加到ArrayList后，打印元素的大小。
+
+- 异常
+
+  ```
+  Exception in thread "Thread-0" java.lang.ArrayIndexOutOfBoundsException: 823
+  	at java.util.ArrayList.add(ArrayList.java:465)
+  ```
+
+- 小于2000
+
+- size符合预期，中间有null值存在：https://segmentfault.com/a/1190000023807751
+
+
+
+### 在哪会出现线程安全问题
+
+```java
+elementData[size++] = e;
+```
+
+size++为非原子操作，在语言层面分为
+
+```java
+elementData[size] = e;
+size = size + 1;
+```
+
+在jvm指令层面分为取值、加1、存值。
+
+```java
+0:iconst_0
+1:istore_1
+2:iinc 1, 1
+```
+
+
+
+### 为什么会有线程安全问题
+
+数组越界：线程t1向ArrayList中添加元素823，线程t1执行完判断逻辑可以添加元素，由于CPU调度，线程t2去执行，线程t2向ArrayList中添加元素1300，执行后，容量刚好不够了，线程t1恢复执行`elementData[size++] = e`，导致数组越界。
+
+比实际容量小：线程t1执行`elementData[size] = e`后，CPU调度，线程t2去执行添加元素，此时线程t2的size拿的还是线程t1执行时的size，t2线程执行完size自增1，此时线程t1并不知道size已经加1，使用的依旧是旧值自增，此时线程t1的值就将线程t2中的值给覆盖了。
+
+
+
+试想size如果使用并发包原子类是否存在容量问题呢？
+
+
+
+### 怎么解决
+
+- Collections#synchronizedCollection
+- CopyOnWriteArrayList
+
+
+
+总结：ArrayList在多线程环境不适用，适合于读多写少的场景。
 
