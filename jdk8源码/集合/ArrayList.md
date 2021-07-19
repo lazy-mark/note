@@ -192,6 +192,31 @@ public void trimToSize() {
 
 ## 多线程安全问题
 
+先来看看单线程的例子：
+
+```java
+public void security() throws InterruptedException {
+    List<String> strings = new ArrayList<>();
+    Thread thread = new Thread(() -> {
+        for (int j = 0; j < 1000; j++) {
+            strings.add(String.valueOf(j));
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    });
+    thread.start();
+    thread.join();
+    System.out.println(strings.size());
+}
+```
+
+执行结果和预期的一致。
+
+
+
 例子：线程A、线程B同时向ArrayList中添加元素；
 
 ```java
@@ -285,6 +310,47 @@ size = size + 1;
 
 - Collections#synchronizedCollection
 - CopyOnWriteArrayList
+
+
+
+## 新特征
+
+### removeIf
+
+前面已经研究过，如果删除List中的某个元素，只会删除第一个，当存在多个该元素时，就会出现不干净的情况。在jdk8提出了该方法，支持删除List中指定的所有元素，同时也支持其它集合类型，例如List、Set等。
+
+```java
+public void testIfRemove() {
+    List<Integer> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i);
+    }
+    strings.removeIf(t -> {
+        return t % 2 != 0;
+    });
+    // [0, 2, 4, 6, 8]
+    System.out.println(strings);
+}
+```
+
+这里是对ArrayList中的奇数进行了删除。
+
+```java
+List<Integer> strings = new ArrayList<>();
+for (int i = 0; i < 10; i++) {
+    strings.add(i);
+}
+Set<Integer> set = new HashSet<>();
+set.add(2);set.add(4);set.add(6);set.add(8);set.add(10);
+
+boolean removeIf = strings.removeIf(set::contains);
+if (removeIf) {
+    // [0, 1, 3, 5, 7, 9]
+    System.out.println(strings);
+}
+```
+
+ArrayList会删除和Set中共有的元素。
 
 
 
