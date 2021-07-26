@@ -57,6 +57,8 @@ LinkedList的继承树
 
 ### 添加
 
+在LinkedList中，支持从头节点前添加一个节点【头插法】、尾节点后添加一个节点【尾插法】、某个节点【非头/非尾】前插入一个节点。
+
 #### linkLast
 
 从链表的尾节点后添加一个节点。
@@ -120,23 +122,201 @@ private void linkFirst(E e) {
 
 首次添加元素前结构与linkLast一致。linkFirst和linkLast添加节点非常类似，前者是更换上一个节点(last:0x01)的prev指向，后者是更换上一个节点(first:0x01)的next指向。结构图如下：
 
-
+![image-20210725122708745](asserts/image-20210725122708745.png)
 
 #### linkBefore
 
+在链表中某个节点前插入一个节点。
+
+```java
+void linkBefore(E e, Node<E> succ) {
+  final Node<E> pred = succ.prev;
+  final Node<E> newNode = new Node<> (pred, e, succ);
+  succ.prev = newNode;
+  if (pred == null) {
+    first = newNode;
+  } else {
+    pred.next = newNode;
+  }
+  size++;
+  modCount++;
+}
+```
+
+示意图如下：
+
+![image-20210725124100746](asserts/image-20210725124100746.png)
+
 ### 删除
+
+在链表中，删除一个节点也存在多种方式，分别支持删除头节点、尾节点、中间节点。
 
 #### unlinkLast
 
+```java
+private E unlinkLast(Node<E> l) {
+  final E element = l.item;
+  final Node<E> prev = l.prev;
+  l.item = null;
+  l.prev = null;
+  last = prev;
+  if (prev == null) {
+    first = null;
+  } else {
+    prev.next = null;
+  }
+  size--;
+  modCount++;
+  return element;
+}
+```
+
+删除尾节点。
+
 #### unlinkFirst
+
+```java
+private E unlinkFirst(Node<E> f) {
+  final E element = f.item;
+  final Node<E> next = f.next;
+  f.item = null;
+  f.next = null;
+  first = next;
+  if (next == null) {
+    last = null;
+  } else {
+    next.prev = null;
+  }
+  size--;
+  modCount++;
+  return element;
+}
+```
+
+删除头节点。
+
+
 
 #### unlink
 
-### 修改
+```java
+E unlink(Node<E> x) {
+	//拿到节点中的元素
+  final E element = x.item;
+  //拿到要删除节点的下一个节点
+  final Node<E> next = x.next;
+  //拿到要删除节点的上一个节点
+  final Node<E> prev = x.prev;
+  //如果要删除节点的上一个节点为null,则将删除节点的下一个节点作为头节点
+  if (prev == null) {
+      first = next;
+  } else {
+    	//将删除节点的上一个节点重新指向,指向下一个节点,并将要删除节点的prev指向null
+      prev.next = next;
+      x.prev = null;
+  }
+  if (next == null) {
+    	//如果要删除节点的下一个节点为空,则将要删除节点的上一个节点作为尾节点
+      last = prev;
+  } else {
+    	//修改要删除节点的下一个节点指向
+      next.prev = prev;
+      x.next = null;
+  }
+  //将要删除的节点元素置为null,链表长度减一,修改加1,返回之前要删除的节点元素
+  x.item = null;
+  size--;
+  modCount++;
+  return element;
+}
+```
+
+删除中间节点中的。
+
+
 
 ### 查找
 
 #### node
 
+```java
+Node<E> node(int index) {
+  if (index < (size >> 1)) {
+    Node<E> x = first;
+    for (int i = 0; i < index; i++) {
+      x = x.next;
+      return x;
+    } else {
+      Node<E> x = last;
+      for (int i = size - 1; i > index; i--) {
+        x = x.prev;
+      }
+      return x;
+    }
+  }
+}
+```
+
+根据索引查找某个节点，通常是需要从头开始遍历到索引位置，但是LinkedList实现方式更加高效，也由于双向链表的特性，能够存储当前节点的前一个节点。当要查找的位置大于总个数长度的一半时，从结束位置向前查。小于时，才会从头往后查。
+
+与此同时，LinkedList将first和last节点同时保存下来，使得能够直接拿到尾节点，如果只保存了其中一个节点，势必需要从一端到索引位置。
+
 #### indexOf
+
+```java
+public int indexOf(Object o) {
+  int index = 0;
+  if (o == null) {
+    for (Node<E> x = first; x != null; x = x.next) {
+      if (x.item = null) {
+        return index;
+      }
+      index++;
+    }
+  } else {
+    for (Node<E> x = first; x != null; x = x.next) {
+      if (o.equals(x.item)) {
+        return index;
+      }
+      index++;
+    }
+  }
+  return -1;
+}
+```
+
+在双向链表中从前往后查找某个元素，返回该元素的索引位置，不存在返回-1；在jdk8中可优化代码量，
+
+```java
+public int indexOf(Object o) {
+  int index = 0;
+  for (Node<E> x = first; x != null; x = x.next) {
+      if (Objects.equals(o, x.item)) {
+        return index;
+      }
+      index++;
+    }
+  return -1;
+}
+```
+
+### 修改
+
+```java 
+public E set(int index, E element) {
+  checkElementIndex(index);
+  Node<E> x = node(index);
+  E oldVal = x.item;
+  x.item = element;
+  return oldVal;
+}
+```
+
+修改某个索引中的值，返回旧值。由于链表无法通过索引快速定位到，因此需要通过某个查找方法查到该位置的节点。
+
+
+
+## 充当队列
+
+
 
