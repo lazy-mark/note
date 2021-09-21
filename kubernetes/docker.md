@@ -1,6 +1,7 @@
 docker安装脚本
 
 ```sh
+#!/bin/bash
 # 卸载旧版本
 yum remove docker \
              docker-client \
@@ -23,5 +24,24 @@ yum-config-manager \
 
 # 安装最新版docker
 yum install -y docker-ce
+```
+
+镜像加速器
+
+```sh
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://misgj83x.mirror.aliyuncs.com"]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+
+
+```
+docker run --restart=unless-stopped -d --name mysql -v /usr/mysql/conf/my.cnf:/etc/mysql/my.cnf -v /usr/mysql/data:/var/lib/mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 mysql
 ```
 

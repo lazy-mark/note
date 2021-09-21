@@ -10,7 +10,9 @@
 - 高性能：高可用低延时，ID生成响应要块，否则反倒会成为业务瓶颈；
 - 高可用：100%的可用性是骗人的，但是也要无限接近于100%的可用性；
 
-系统设计和实现尽可能简单；ID最好是递增的。
+系统设计和实现尽可能简单、ID最好是递增的。
+
+
 
 ## 分布式ID生成方式
 
@@ -20,7 +22,11 @@
 
 优点：生成简单，无网络消耗，唯一性；
 
-缺点：无序字符串，不具备自增；无具体业务含义；长度过长，存储及查询对MySQL的性能消耗较大，MySQL官方建议主键要尽量越短越好，UUID作为数据库主键，会导致数据位置频繁变动，严重影响性能；
+缺点：
+
+- 无序字符串，不具备自增；
+- 无具体业务含义；
+- 长度过长，存储及查询对MySQL的性能消耗较大，MySQL官方建议主键要尽量越短越好，UUID作为数据库主键，会导致数据位置频繁变动，严重影响性能；
 
 ### 数据库自增
 
@@ -53,7 +59,7 @@
 CREATE TABLE id_generator (
   id int(10) NOT NULL,
   max_id bigint(20) NOT NULL COMMENT '当前最大id',
-  step int(20) NOT NULL COMMENT '号段的布长',
+  step int(20) NOT NULL COMMENT '号段的步长',
   biz_type	int(20) NOT NULL COMMENT '业务类型',
   version int(20) NOT NULL COMMENT '版本号',
   PRIMARY KEY (`id`)
@@ -70,7 +76,7 @@ version ：是一个乐观锁，每次都更新version，保证并发时数据�
 
 
 
-等这批号段ID用完，再次向数据库申请新号段，对`max_id`字段做一次`update`操作，`update max_id= max_id + step`，update成功则说明新号段获取成功，新的号段范围是`(max_id ,max_id +step]`。
+这批号段ID用完，再次向数据库申请新号段，对`max_id`字段做一次`update`操作，`update max_id= max_id + step`，update成功则说明新号段获取成功，新的号段范围是`(max_id ,max_id + step]`。
 
 
 
