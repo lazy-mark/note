@@ -8,7 +8,7 @@ CAP理论作为分布式系统的基础理论，描述的是一个分布式系�
 - 可用性【availability】
 - 分区容错性【partition tolerance】
 
-最多满足其中两个特性，如下图所示。分布式系统要么满足CA，要么满足CP，要么AP，无法同时满足CAP。
+最多满足其中两个特性，如下图所示。分布式系统要么满足CP，要么AP，无法同时满足CAP。
 
 ![img](https://bkimg.cdn.bcebos.com/pic/5bafa40f4bfbfbed9c15b19b72f0f736aec31f81?x-bce-process=image/watermark,image_d2F0ZXIvYmFpa2U5Mg==,g_7,xp_5,yp_5/format,f_auto)
 
